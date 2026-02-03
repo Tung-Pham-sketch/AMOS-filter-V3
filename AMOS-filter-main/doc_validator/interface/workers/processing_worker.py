@@ -13,6 +13,10 @@ from doc_validator.core.drive_io import (
 )
 from doc_validator.core.excel_pipeline import process_excel
 from doc_validator.core.input_source_manager import FileInfo
+from doc_validator.validation.init_validator import (
+    initialize_validation_engine,
+    get_rule_manager,
+)
 
 
 # ---------------------------------------------------------------------
@@ -57,6 +61,7 @@ class EmittingStream:
 class ProcessingWorker(QThread):
     """
     Background worker that:
+      * Initializes the validation engine (database rules)
       * Processes local files OR downloads Drive files
       * Runs the Excel processing pipeline (process_excel)
       * Emits log lines and progress updates back to the GUI
@@ -74,6 +79,7 @@ class ProcessingWorker(QThread):
             filter_start_date: Optional[date] = None,
             filter_end_date: Optional[date] = None,
             enable_action_step_control: bool = True,
+            connection_string: Optional[str] = None,  # NEW: Database connection
             parent: Optional[QObject] = None,
     ):
 
@@ -84,6 +90,7 @@ class ProcessingWorker(QThread):
         self.filter_start_date = filter_start_date
         self.filter_end_date = filter_end_date
         self.enable_action_step_control = enable_action_step_control
+        self.connection_string = connection_string
 
         self._cancelled = False
         self._line_count = 0
@@ -148,6 +155,38 @@ class ProcessingWorker(QThread):
         sys.stderr = stream
 
         try:
+            # ========== INITIALIZE VALIDATION ENGINE ==========
+            # Check if validation engine is already initialized
+            rule_manager = get_rule_manager()
+            
+            if rule_manager is None:
+                if not self.connection_string:
+                    # Use default connection string if not provided
+                    self.connection_string = (
+                        "Driver={ODBC Driver 17 for SQL Server};"
+                        "Server=DESKTOP-7BI6STN;"
+                        "Database=AMOS-filter-validation;"
+                        "Trusted_Connection=yes;"
+                    )
+                
+                self._emit_log_and_count("Initializing validation engine...\n")
+                self.progress_updated.emit(2, "Loading validation rules from database...")
+                
+                try:
+                    initialize_validation_engine(self.connection_string)
+                    self._emit_log_and_count("✓ Validation engine initialized successfully.\n\n")
+                    self.progress_updated.emit(5, "Validation rules loaded")
+                except Exception as e:
+                    self._emit_log_and_count(
+                        f"❌ ERROR: Failed to initialize validation engine: {e}\n"
+                        "Using fallback validation rules.\n\n"
+                    )
+                    # Continue with fallback - old hardcoded rules will be used
+            else:
+                self._emit_log_and_count("✓ Validation engine already initialized.\n\n")
+                self.progress_updated.emit(5, "Using cached validation rules")
+
+            # ========== DRIVE AUTHENTICATION ==========
             # Check if we need Drive authentication
             need_drive = any(f.source_type == "drive" for f in self.selected_files)
             drive_service = None
@@ -160,11 +199,12 @@ class ProcessingWorker(QThread):
                     return
 
                 self._emit_log_and_count("Authenticating with Google Drive API...\n")
-                self.progress_updated.emit(5, "Authenticating...")
+                self.progress_updated.emit(8, "Authenticating...")
                 drive_service = authenticate_drive_api(self.api_key)
                 self._emit_log_and_count("✓ Authentication successful.\n\n")
                 self.progress_updated.emit(10, "Authentication successful")
 
+            # ========== PROCESS FILES ==========
             total = len(self.selected_files)
             self._emit_log_and_count(f"Processing {total} selected file(s)...\n")
 
