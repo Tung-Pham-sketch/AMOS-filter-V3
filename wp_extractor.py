@@ -14,10 +14,10 @@ import time
 # ============================================================================
 SQL_SERVER_CONFIG = {
     'driver': '{ODBC Driver 17 for SQL Server}',
-    'server': '10.99.150.201',
-    'database': 'NQT',
-    'uid': 'nguyenquoctruong',
-    'pwd': '@Truong1972'
+    'server': 'xx.xx.xxx.xxx',
+    'database': 'xxx',
+    'uid': 'xxx',
+    'pwd': '@xxxx'
 }
 
 WP_CUR_PATH = 'D:\D\VFP_HSBD\HDBD\wp_cur.dbf'
