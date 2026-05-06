@@ -1,0 +1,11 @@
+/DATA
+*.xlsx
+doc_validator/link.txt
+/EXE
+/build
+/DATA/log
+/dist
+/doc_validator/core/__pycache__
+*.pyc
+/Outsorce
+*.docx
